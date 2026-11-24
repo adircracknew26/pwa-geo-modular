@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="GeoPWA">
+  <title>Geolocalización Consciente PWA</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <img src="./icons/icon-192.png" alt="Icono GeoPWA" class="brand-icon">
+      <div>
+        <h1>Geolocalización Consciente PWA</h1>
+        <p class="subtitle">Tema 6.3 · Módulo Reutilizable <code>geo-helper.js</code></p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span id="badge-plataforma" class="platform-badge">Detectando entorno...</span>
+      <button id="btn-instalar" type="button" class="btn btn-install" hidden>
+        Instalar App
+      </button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Guía manual exclusiva para dispositivos iOS (Safari / WebKit) -->
+    <section id="instrucciones-ios" class="card ios-banner" hidden>
+      <h2>Instalación en iPhone / iPad (iOS)</h2>
+      <p>
+        Para instalar esta PWA en iOS, pulsa el icono <strong>Compartir</strong> en Safari y selecciona <strong>'Agregar a inicio'</strong>. Recuerda que en iOS los permisos de Safari y de la PWA instalada son independientes.
+      </p>
+    </section>
+
+    <!-- Panel Principal: Control de Ubicación y Estado del Permiso -->
+    <section class="card geo-status-card">
+      <div class="card-header-row">
+        <h2>1. Control de Ubicación Consciente</h2>
+        <span id="badge-estado-permiso" class="perm-badge perm-prompt">Permiso: prompt</span>
+      </div>
+
+      <div class="status-bar">
+        <span class="status-dot" id="indicador-led"></span>
+        <p id="mensaje-estado" class="status-text">
+          Ubicación aún no solicitada. Pulsa "Adjuntar mi ubicación" para comenzar.
+        </p>
+      </div>
+
+      <div class="controls-grid">
+        <button id="btn-adjuntar-ubicacion" type="button" class="btn btn-primary">
+          Adjuntar mi ubicación
+        </button>
+        <button id="btn-abrir-plan-b" type="button" class="btn btn-secondary">
+          Ingresar zona manualmente (Plan B)
+        </button>
+      </div>
+
+      <!-- Tarjeta de Resultado de Coordenadas e Indicador de Calidad de Señal -->
+      <div id="panel-coordenadas" class="coords-box" hidden>
+        <div class="coords-header">
+          <span class="coords-title">Lectura Geográfica Activa</span>
+          <span id="badge-calidad-senal" class="signal-badge">Calculando...</span>
+        </div>
+
+        <div class="coords-grid">
+          <div class="coord-item">
+            <span class="coord-label">Latitud</span>
+            <strong id="valor-latitud" class="coord-value">--</strong>
+          </div>
+          <div class="coord-item">
+            <span class="coord-label">Longitud</span>
+            <strong id="valor-longitud" class="coord-value">--</strong>
+          </div>
+          <div class="coord-item">
+            <span class="coord-label">Margen de error (accuracy)</span>
+            <strong id="valor-precision" class="coord-value">-- m</strong>
+          </div>
+          <div class="coord-item">
+            <span class="coord-label">Marca de tiempo</span>
+            <strong id="valor-timestamp" class="coord-value">--</strong>
+          </div>
+        </div>
+
+        <p id="origen-ubicacion-nota" class="coords-note"></p>
+      </div>
+    </section>
+
+    <!-- Paso 1 UX Ética: Tarjeta de Pre-Permiso (Se muestra cuando estado === 'prompt') -->
+    <section id="tarjeta-prepermiso" class="card ethical-card" hidden>
+      <div class="ethical-badge">Consentimiento Consciente (Pre-Permiso)</div>
+      <h2>¿Por qué solicitamos tu ubicación?</h2>
+      <p>
+        Necesitamos tu ubicación aproximada para <strong>adjuntar las coordenadas al reporte técnico</strong> y <strong>calcular la sucursal de soporte más cercana</strong>.
+      </p>
+      <ul class="ethical-details">
+        <li><strong>Lectura única bajo demanda:</strong> Usamos <code>getCurrentPosition()</code> solo cuando lo autorizas; no rastreamos tu movimiento en segundo plano.</li>
+        <li><strong>Compatibilidad iOS y Android:</strong> Tu navegador mostrará el diálogo oficial del sistema al pulsar el botón de confirmación.</li>
+        <li><strong>Plan B siempre disponible:</strong> Si prefieres no compartir GPS, puedes elegir tu zona manualmente sin bloquear la aplicación.</li>
+      </ul>
+      <div class="ethical-actions">
+        <button id="btn-confirmar-ubicacion" type="button" class="btn btn-confirm">
+          Compartir mi ubicación
+        </button>
+        <button id="btn-rechazar-prepermiso" type="button" class="btn btn-secondary">
+          Usar selector manual de zona
+        </button>
+      </div>
+    </section>
+
+    <!-- Paso 3 UX Ética: Plan B Obligatorio (Selector Manual de Zona / Degradación Elegante) -->
+    <section id="panel-plan-b" class="card fallback-card" hidden>
+      <div class="fallback-badge">Plan B · Degradación Elegante Activa</div>
+      <h2>Selección Manual de Zona o Ciudad</h2>
+      <p id="mensaje-motivo-fallback" class="fallback-desc">
+        Si el permiso fue denegado, tu equipo no cuenta con chip GPS o se agotó el tiempo de espera, selecciona tu zona manualmente para continuar sin bloqueos:
+      </p>
+
+      <!-- Instrucciones de reactivación de permiso según plataforma -->
+      <div id="guia-reactivar-permiso" class="reactivate-box">
+        <strong>¿Cómo reactivar el permiso de ubicación en tu navegador?</strong>
+        <ul>
+          <li><strong>Android (Chrome):</strong> Toca el icono de ajustes/candado junto a la URL &rarr; <em>Permisos</em> &rarr; <em>Ubicación</em> &rarr; <em>Permitir</em>.</li>
+          <li><strong>iOS (iPhone / Safari):</strong> Ve a <em>Configuración</em> &rarr; <em>Privacidad y seguridad</em> &rarr; <em>Localización</em> &rarr; <em>Sitios web de Safari</em> &rarr; <em>Al usar la app</em> (o toca <em>aA</em> en la barra de Safari &rarr; <em>Configuración del sitio web</em>).</li>
+          <li><strong>Escritorio (PC / Laptop):</strong> Haz clic en el icono de ajustes de sitio a la izquierda de la barra de direcciones y cambia <em>Ubicación</em> a <em>Permitir</em>.</li>
+        </ul>
+      </div>
+
+      <div class="form-group">
+        <label for="select-zona-manual">Zona / Ciudad de referencia:</label>
+        <select id="select-zona-manual" class="form-control">
+          <option value="">-- Selecciona una zona --</option>
+          <option value="cdmx-centro">CDMX · Centro Histórico (19.4326, -99.1332)</option>
+          <option value="cdmx-sur">CDMX · Zona Sur / Coyoacán (19.3467, -99.1617)</option>
+          <option value="gdl-centro">Guadalajara · Zona Minerva (20.6744, -103.3874)</option>
+          <option value="mty-centro">Monterrey · San Pedro / Centro (25.6866, -100.3161)</option>
+          <option value="puebla-centro">Puebla · Angelópolis (19.0414, -98.2063)</option>
+          <option value="qro-centro">Querétaro · Zona Industrial (20.5888, -100.3899)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="input-referencia-manual">Dirección o referencia adicional (opcional):</label>
+        <input
+          type="text"
+          id="input-referencia-manual"
+          class="form-control"
+          placeholder="Ej. Av. Insurgentes Sur 123, frente a estación..."
+        >
+      </div>
+
+      <button id="btn-aplicar-zona-manual" type="button" class="btn btn-warning">
+        Confirmar Zona Manual
+      </button>
+    </section>
+
+    <!-- Fragmento C - Caso de Uso 1: Envío de Reporte Técnico con Ubicación -->
+    <section class="card">
+      <div class="card-header-row">
+        <h2>2. Caso de Uso A: Reporte Técnico con Coordenadas</h2>
+        <span class="chip">Alta Precisión (enableHighAccuracy: true)</span>
+      </div>
+      <p class="section-desc">
+        Reutiliza <code>obtenerUbicacionActual({ enableHighAccuracy: true, timeout: 7000 })</code> al enviar la incidencia, o adjunta la zona manual del Plan B si no hay GPS.
+      </p>
+
+      <form id="form-reporte" class="report-form">
+        <div class="form-group">
+          <label for="tipo-incidencia">Tipo de incidencia técnica:</label>
+          <select id="tipo-incidencia" class="form-control" required>
+            <option value="Falla de conectividad / Fibra óptica">Falla de conectividad / Fibra óptica</option>
+            <option value="Mantenimiento de terminal en campo">Mantenimiento de terminal en campo</option>
+            <option value="Inspección de infraestructura eléctrica">Inspección de infraestructura eléctrica</option>
+            <option value="Entrega de equipo en sucursal">Entrega de equipo en sucursal</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="descripcion-reporte">Observaciones del técnico:</label>
+          <textarea
+            id="descripcion-reporte"
+            class="form-control"
+            rows="2"
+            placeholder="Describe el hallazgo o actividad realizada en sitio..."
+            required
+          >Revisión preventiva de nodo y verificación de cobertura.</textarea>
+        </div>
+
+        <button id="btn-enviar-reporte" type="submit" class="btn btn-primary">
+          Enviar Reporte con Ubicación
+        </button>
+      </form>
+
+      <div id="contenedor-reportes" class="reports-list" hidden>
+        <h3>Reportes Generados en esta Sesión</h3>
+        <div id="lista-reportes"></div>
+      </div>
+    </section>
+
+    <!-- Fragmento C - Caso de Uso 2: Buscador de Sucursales Cercanas -->
+    <section class="card">
+      <div class="card-header-row">
+        <h2>3. Caso de Uso B: Sucursales Cercanas</h2>
+        <span class="chip chip-fast">Lectura Rápida (enableHighAccuracy: false)</span>
+      </div>
+      <p class="section-desc">
+        Reutiliza <code>obtenerUbicacionActual({ enableHighAccuracy: false, maximumAge: 60000 })</code> para filtrar centros de atención cercanos sin drenar la batería.
+      </p>
+
+      <button id="btn-buscar-sucursales" type="button" class="btn btn-secondary btn-full">
+        Buscar Sucursales Cercanas
+      </button>
+
+      <div id="lista-sucursales" class="branches-grid"></div>
+    </section>
+  </main>
+
+  <!-- Requisito 1 del Desafío: Orden obligatorio de carga de scripts -->
+  <script src="./geo-helper.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
